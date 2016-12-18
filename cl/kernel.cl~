@@ -1,0 +1,13 @@
+typedef struct
+{
+	image2d_t text;
+}
+
+global void draw_point(global t_surface *surf)
+{
+	int2 imgCoords = (int2)(get_global_id(0), get_global_id(1));
+ 
+	float4 imgVal = (float4)(1.0f, 1.0f, 0.0f, 1.0f);
+ 
+	write_imagef(surf->text, imgCoords, imgVal);
+}

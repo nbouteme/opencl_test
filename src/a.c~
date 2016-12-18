@@ -1,0 +1,87 @@
+#include <OpenCL/opencl.h>
+#include <xmlx.h>
+#include <string.h>
+#include <OpenGL/gl.h>
+
+typedef struct {
+	t_xmlx_window *win;
+	cl_context ctx;
+	cl_command_queue queue;
+	cl_program program;
+	cl_kernel kernel;
+	cl_mem tex_ref;
+} t_clctx;
+
+void event_loop(void *up)
+{
+	t_clctx *ctx = up;
+
+	clEnqueueAcquireGLObjects(ctx->queue, 1, &ctx->tex_ref, 0, 0, 0);
+
+/*
+  Run kernel here
+*/
+
+	clSetKernelArg(ctx->kernel, 0, sizeof(cl_mem), &ctx->tex_ref);
+
+	size_t dims[2] = {1280, 720};
+	clEnqueueNDRangeKernel(ctx->queue, ctx->kernel, 2, 0, dims, 0, 0, 0, 0);
+
+	/*
+	  Release the texture
+	*/
+	clEnqueueReleaseGLObjects(ctx->queue, 1, &ctx->tex_ref, 0, 0, 0);
+}
+
+void handle_key(t_xmlx_window *win, int k, int a, int m)
+{
+	if(k == XMLX_KEY_ESCAPE)
+		win->stop = 1;
+	(void)a;
+	(void)win;
+	(void)m;
+}
+
+void init_opencl(t_clctx *ctx)
+{
+	int err;
+	cl_uint numDevices;
+	clGetDeviceIDs(0, CL_DEVICE_TYPE_GPU, 0, 0, &numDevices);
+	cl_device_id devices[numDevices];
+	clGetDeviceIDs(0, CL_DEVICE_TYPE_GPU, numDevices, devices, 0);
+	int deviceUsed = 0;
+	ctx->ctx = clCreateContext(0, 1, &devices[deviceUsed], 0, 0, &err);
+	ctx->queue = clCreateCommandQueue(ctx->ctx, devices[deviceUsed], 0, &err);
+	size_t len = strlen("kernel.co");
+	const unsigned char *file = (void*)"kernel.co";
+	ctx->program = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len, &file, 0, &err);
+	clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
+	ctx->kernel = clCreateKernel(ctx->program, "main", &err);
+}
+
+void destroy_opencl(t_clctx *ctx)
+{
+	clReleaseKernel(ctx->kernel);
+	clReleaseProgram(ctx->program);
+	clReleaseCommandQueue(ctx->queue);
+	clReleaseContext(ctx->ctx);
+}
+
+int main()
+{
+
+	t_clctx ctx;
+	init_opencl(&ctx);
+
+	xmlx_init();
+	t_xmlx_window *win = xmlx_new_window(1280, 720, "tests", FLOAT4);
+	int err;
+	ctx.tex_ref = clCreateFromGLTexture(ctx.ctx, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, ctx.win->framebuffer->tex_id, &err);
+
+	win->on_key = handle_key;
+	xmlx_run_window(win, event_loop, &ctx);
+
+	destroy_opencl(&ctx);
+	xmlx_destroy_window(win);
+	xmlx_destroy();
+}
