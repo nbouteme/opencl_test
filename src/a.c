@@ -1,4 +1,9 @@
 #include <OpenCL/opencl.h>
+#include <OpenCL/cl_ext.h>
+#include <OpenCL/cl_gl.h>
+#include <OpenCL/cl_gl_ext.h>
+#include <OpenCL/gcl.h>
+#include <OpenGL/CGLCurrent.h>
 #include <xmlx.h>
 #include <string.h>
 #include <OpenGL/gl.h>
@@ -40,6 +45,7 @@ void event_loop(void *up)
 	e = clEnqueueReleaseGLObjects(ctx->queue, 1, &ctx->tex_ref, 0, 0, 0);
 	e != CL_SUCCESS && printf("error %d\n", e);
 	assert(e == CL_SUCCESS);
+	xmlx_draw(ctx->win);
 }
 
 void handle_key(t_xmlx_window *win, int k, int a, int m)
@@ -51,39 +57,31 @@ void handle_key(t_xmlx_window *win, int k, int a, int m)
 	(void)m;
 }
 
-void init_opencl(t_clctx *ctx)
+int init_opencl(t_clctx *ctx)
 {
-	int err;
+	int err = 0;
 	cl_uint numDevices;
 	clGetDeviceIDs(0, CL_DEVICE_TYPE_GPU, 0, 0, &numDevices);
 	cl_device_id devices[numDevices];
 	clGetDeviceIDs(0, CL_DEVICE_TYPE_GPU, numDevices, devices, 0);
 	int deviceUsed = 0;
-	ctx->ctx = clCreateContext(0, 1, &devices[deviceUsed], 0, 0, &err);
-	assert(err == CL_SUCCESS);
+	
+	CGLContextObj kCGLContext = CGLGetCurrentContext();
+	CGLShareGroupObj kCGLShareGroup = CGLGetShareGroup(kCGLContext);
+
+	cl_context_properties properties[] = {
+		CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE,
+		(cl_context_properties)kCGLShareGroup, 0
+	};
+
+	ctx->ctx = clCreateContext(properties, 1, &devices[deviceUsed], 0, 0, &err);	
 	ctx->queue = clCreateCommandQueue(ctx->ctx, devices[deviceUsed], 0, &err);
 	size_t len = strlen("kernel.co");
 	const unsigned char *file = (void*)"kernel.co";
 	ctx->program = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len, &file, 0, &err);
-	assert(err == CL_SUCCESS);
 	err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
-	err != CL_SUCCESS && printf("error %d\n", err);
-
-	{
-      size_t len;
-      char *buffer;
-      clGetProgramBuildInfo(ctx->program, devices[deviceUsed], CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
-      buffer = calloc(1, len);
-      clGetProgramBuildInfo(ctx->program, devices[deviceUsed], CL_PROGRAM_BUILD_LOG, len, buffer, NULL);
-      printf("%s\n", buffer);
-	  free(buffer);
-	}
-
-	
-	assert(err == CL_SUCCESS);
 	ctx->kernel = clCreateKernel(ctx->program, "clear_screen", &err);
-	printf("error %d\n", err);
-	assert(err == CL_SUCCESS);
+	return 1;
 }
 
 void destroy_opencl(t_clctx *ctx)
@@ -98,13 +96,16 @@ int main()
 {
 
 	t_clctx ctx;
-	init_opencl(&ctx);
-
+	
 	xmlx_init();
 	t_xmlx_window *win = xmlx_new_window(1280, 720, "tests", FLOAT4);
 	int err;
 	ctx.win = win;
 	xmlx_present(ctx.win);
+
+	if (!init_opencl(&ctx))
+		return 1;
+
 	err = CL_SUCCESS;
 	printf("tex: %d\n", ctx.win->framebuffer->tex_id);
 	ctx.tex_ref = clCreateFromGLTexture(ctx.ctx, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, ctx.win->framebuffer->tex_id, &err);
