@@ -4,7 +4,9 @@ TYPE = prog
 MODULES = src
 CFLAGS = -Wall -Wextra -Werror -g
 #CFLAGS = -Wall -Wextra -Werror -flto -Ofast -march=native -mtune=native -ffinite-math-only -funsafe-math-optimizations -fno-math-errno  -ffast-math
-LFLAGS = $(CFLAGS) -lm -framework OpenCL
+LFLAGS = $(CFLAGS) -lm
+LFLAGS_Darwin = -framework Opencl
+LFLAGS_Linux = -lOpenCL
 INCLUDE_DIRS = $(PKG_DIR)/include
 DEPS = libft xmlx
 
