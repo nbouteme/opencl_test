@@ -133,15 +133,16 @@ int init_opencl(t_clctx *ctx)
 	if (err != CL_SUCCESS)
 		printf("error %d\n", err);
 	assert(err == CL_SUCCESS);
-#define SOURCE
+//#define SOURCE
 #ifndef SOURCE
 	const unsigned char *file = (void*)"kernel.co";
-	size_t len = strlen(file);
+	//const unsigned char *file = (void*)"dump.bin";
+	size_t len = strlen((void*)file);
 	ctx->program = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len, &file, 0, &err);
 	if (err != CL_SUCCESS)
 		printf("error %d\n", err);
 	assert(err == CL_SUCCESS);
-	//err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
+	err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
 	if (err != CL_SUCCESS)
 		printf("error %d\n", err);
 	assert(err == CL_SUCCESS);
@@ -154,6 +155,7 @@ int init_opencl(t_clctx *ctx)
 		printf("error %d\n", err);
 	assert(err == CL_SUCCESS);
 	err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
+
 	//free(source);
 	if (err != CL_SUCCESS)
 	{
@@ -164,17 +166,6 @@ int init_opencl(t_clctx *ctx)
 		clGetProgramBuildInfo(ctx->program, devices[deviceUsed], CL_PROGRAM_BUILD_LOG, len, b, 0);
 		puts(b);
 	}
-	size_t size;
-	char *bin;
-    clGetProgramInfo(ctx->program, CL_PROGRAM_BINARY_SIZES, 1 * sizeof(size_t), &size, NULL);
-	printf("size: %zu\n", size);
-	bin = malloc(size);
-	printf("buffer: %p\n", bin);
-	clGetProgramInfo(ctx->program, CL_PROGRAM_BINARIES, 0, &bin, NULL);
-	int fd = open("dump.bin", O_WRONLY | O_CREAT, 0644);
-	write(fd, bin, size);
-	close(fd);
-	assert(err == CL_SUCCESS);
 #endif
 
 	ctx->kernel = clCreateKernel(ctx->program, "clear_screen", &err);
@@ -196,6 +187,19 @@ void destroy_opencl(t_clctx *ctx)
 	err = clReleaseContext(ctx->ctx);
 	assert(err == CL_SUCCESS);
 }
+
+typedef struct
+{
+	const char *filename;
+	void *start;
+	unsigned long size;
+	void *unused;
+}t_kek;
+
+extern t_kek symtable[];
+
+#include <stdio.h>
+#include <unistd.h>
 
 int main()
 {

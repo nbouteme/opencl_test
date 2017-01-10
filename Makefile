@@ -33,7 +33,7 @@ src_from_modules = $(shell find $1 -maxdepth 1 -type f | grep -v '^/\.' | grep '
 nsrc_from_modules = $(shell find $1 -maxdepth 1 -type f | grep -v '^/\.' | grep '.c$$' | wc -l)
 eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 get_val_in_file =	$(if $(call file_exist,$1),\
-						$(shell cat $1  | sed -n "s/$2.=.\(.*\)/\1/p"))
+						$(shell cat $1  | sed -n "s/$2.=.//p"))
 
 BUILD_CFG := $(shell ls ./config/build_cfg.mk 2> /dev/null)
 LINK_CFG := $(shell ls ./config/link_cfg.mk 2> /dev/null)
@@ -94,7 +94,6 @@ $(foreach dep,$(CUR_DEPS),																					\
 	$(if $($(dep)_FOUND),,$(error Dependency $(dep) not found.))											\
 )
 
-#NSRCS		:= $(call nsrc_from_modules, $(CUR_MODULES))
 BUILD_DEPS	 = build
 
 build:
@@ -102,12 +101,15 @@ build:
 	@mkdir -p build
 
 define BUILD_DIR_RULE
+
 $$(eval $1_CC ?= $(CC))
 $$(eval $1_EXT ?= .c)
 
 $$(eval TMP = $$(call src_from_modules,$1))
 $$(eval SRCS += $$(TMP))
-$$(eval OBJS += $$(TMP:$$($1_EXT)=.o))
+$$(eval $1_OBJS = $$(TMP:$$($1_EXT)=.o))
+$$(eval $1_OBJSP = $$(addprefix build/,$$($1_OBJS)))
+$$(eval OBJS += $$($1_OBJS))
 
 $(eval $(if $($1_CFLAGS),\
 	$(eval ACFLAGS_ACC = ),\
@@ -115,19 +117,26 @@ $(eval $(if $($1_CFLAGS),\
 
 build/$1: build
 	@mkdir -p build/$1
+endef
 
+define BUILD_RULE_DEFAULT
 build/$1/%.o: $1/%$$($1_EXT) build
 	$$(gen-pb $$<)
 	$$($1_CC) $$($1_CFLAGS) $(ACFLAGS_ACC) $$(S_CFLAGS_ACC) -c $$< -o $$@ $$(SFLAGS_ACC)
 endef
 
-to_def = $(shell echo $1 | tr [:lower:]/ [:upper:]_)
+to_def = $(shell echo $1 | tr [:lower:]/.- [:upper:]___)
 
 $(foreach mod,$(CUR_MODULES),						\
 	$(eval SFLAGS_ACC += -D$(call to_def,$(mod)))	\
 	$(eval BUILD_DEPS += build/$(mod))				\
 	$(eval $(call BUILD_DIR_RULE,$(mod)))			\
+	$(eval $(if $(BUILD_RULE_$(mod)),				\
+		$(call BUILD_RULE_$(mod),$(mod)),			\
+		$(call BUILD_RULE_DEFAULT,$(mod))))			\
 )
+
+#$(info $(.VARIABLES))
 
 NSRCS = $(words $(SRCS))
 
