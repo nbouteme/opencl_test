@@ -29,8 +29,8 @@ define greenout
 $(shell printf "\033[0;32m%s\033[0m" "$(strip $1)")
 endef
 
-src_from_modules = $(shell find $1 -maxdepth 1 -type f | grep -v '^/\.' | grep '$($1_EXT)$$')
-nsrc_from_modules = $(shell find $1 -maxdepth 1 -type f | grep -v '^/\.' | grep '.c$$' | wc -l)
+src_from_modules = $(shell find $1 -maxdepth 1 -type f -or -type l | grep -v '^/\.' | grep '$($1_EXT)$$')
+nsrc_from_modules = $(shell find $1 -maxdepth 1 -type f -or -type l | grep -v '^/\.' | grep '.c$$' | wc -l)
 eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
 get_val_in_file =	$(if $(call file_exist,$1),\
 						$(shell cat $1  | sed -n "s/$2.=.//p"))
@@ -53,6 +53,20 @@ CUR_DEPS			:= $(DEPS)
 CUR_OUTPUT			:= $(OUTPUT)
 CUR_MODULES			:= $(shell find $(MODULES) -mindepth 0 -type d)
 
+$(foreach sub,$(CUR_MODULES),							\
+	$(eval PARENT := $(dir $(sub)))						\
+	$(eval PARENT := $(PARENT:/=))						\
+	$(if $(call eq $(PARENT),.),kek,					\
+		$(eval $(if $($(PARENT)_CC), $(sub)_CC ?= $($(PARENT)_CC)))			\
+		$(eval $(if $($(PARENT)_CFLAGS), $(sub)_CFLAGS ?= $($(PARENT)_CFLAGS)))	\
+		$(eval $(if $($(PARENT)_EXT), $(sub)_EXT ?= $($(PARENT)_EXT)))			\
+		$(eval BUILD_RULE_$(sub) = $(BUILD_RULE_$(PARENT)))\
+))
+
+KEK = cl/kek
+
+$(info ==== $(BUILD_RULE_$(KEK)) ====)
+
 LFLAGS_ACC			:= $(LFLAGS)
 INCLUDE_DIRS_ACC	:= $(INCLUDE_DIRS)
 CFLAGS_ACC			:= $(addprefix -I,$(INCLUDE_DIRS)) $(CFLAGS)
@@ -61,6 +75,8 @@ S_CFLAGS_ACC		:= $(CFLAGS_$(SYSTEM))
 S_FLAGS_ACC			:= $(SFLAGS_$(SYSTEM))
 
 all: $(CUR_OUTPUT)
+
+.SUFFIXES:
 
 define GEN_DEP_RULE
 $1:
@@ -117,6 +133,40 @@ $(eval $(if $($1_CFLAGS),\
 
 build/$1: build
 	@mkdir -p build/$1
+
+ifneq ($$($1_EMBED),)
+
+$$(eval OBJS += $1/$1_embedded.o)
+
+build/$1/$1_embedded.o: $(addprefix build/,$(OBJS))
+	@echo bits 64 > .tmp2.s
+	@echo section .rodata >> .tmp2.s
+	@for i in $$($1_OBJSP); do \
+		echo extern _start_$$$$i | tr /.- ___ >> .tmp2.s;\
+		echo extern _size_$$$$i | tr /.- ___ >> .tmp2.s;\
+	done
+	@echo -n global >> .tmp2.s
+	@echo _$1_symtable: | tr /.- ___ >> .tmp2.s;
+	@for i in $$($1_OBJSP); do \
+		echo _str_$$$$i: | tr /.- ___ >> .tmp2.s;\
+		echo db \'str_$$$$i\', 0 | tr /.- ___ >> .tmp2.s;\
+	done
+	@echo _$1_symtable: >> .tmp2.s
+	@for i in $$($1_OBJSP); do \
+		echo dq _str_$$$$i | tr /.- ___ >> .tmp2.s;\
+		echo dq _start_$$$$i | tr /.- ___ >> .tmp2.s;\
+		echo dq _size_$$$$i | tr /.- ___ >> .tmp2.s;\
+		echo dq 0 >> .tmp2.s;\
+	done
+	@echo dq 0 >> .tmp2.s
+	@echo dq 0 >> .tmp2.s
+	@echo dq 0 >> .tmp2.s
+	@echo dq 0 >> .tmp2.s
+	@nasm -fmacho64 .tmp2.s -o $$@
+	@rm .tmp2.s
+
+endif
+
 endef
 
 define BUILD_RULE_DEFAULT
@@ -133,7 +183,7 @@ $(foreach mod,$(CUR_MODULES),						\
 	$(eval $(call BUILD_DIR_RULE,$(mod)))			\
 	$(eval $(if $(BUILD_RULE_$(mod)),				\
 		$(call BUILD_RULE_$(mod),$(mod)),			\
-		$(call BUILD_RULE_DEFAULT,$(mod))))			\
+		$(info $(mod) DOESNT HAVE SPECIFIC RULE)$(call BUILD_RULE_DEFAULT,$(mod))))			\
 )
 
 #$(info $(.VARIABLES))

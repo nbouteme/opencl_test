@@ -32,38 +32,13 @@ cl_CFLAGS = -emit-llvm  -arch gpu_64 $(addprefix -I,$(INCLUDE_DIRS_ACC))
 OUTPUT_FORMAT = x86_64
 endif
 cl_EXT := .cl
-
-OBJS += cl_source.o
+cl_EMBED = yes
 
 define BUILD_RULE_cl
 # en plus de compiler, on genere un fichier objet ELF qui contient le binaires et des symboles
 # qui le definisse (debut et taille)
 
-build/cl_source.o:
-	@echo bits 64 > .tmp2.s
-	@echo section .rodata >> .tmp2.s
-	@for i in $$($1_OBJSP); do \
-		echo extern _start_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo extern _size_$$$$i | tr /.- ___ >> .tmp2.s;\
-	done
-	@echo global _symtable >> .tmp2.s
-	@for i in $$($1_OBJSP); do \
-		echo _str_$$$$i: | tr /.- ___ >> .tmp2.s;\
-		echo db \'str_$$$$i\', 0 | tr /.- ___ >> .tmp2.s;\
-	done
-	@echo _symtable: >> .tmp2.s
-	@for i in $$($1_OBJSP); do \
-		echo dq _str_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq _start_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq _size_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq 0 >> .tmp2.s;\
-	done
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@nasm -fmacho64 .tmp2.s -o $$@
-	@rm .tmp2.s
+$$(info DSGDSFGSDFGDFSGDSFGDFSGDFGDFSGF $1)
 
 build/$1/%.o: $1/%$$($1_EXT) build
 	$$(gen-pb $$<)
@@ -87,7 +62,7 @@ build/$1/%.o: $1/%$$($1_EXT) build
 	@echo -n $$@ | tr /.- ___		>> .tmp.s
 	@echo -n :    dd $$$$\-_start_	>> .tmp.s
 	@echo -n $$@ | tr /.- ___		>> .tmp.s
-	@nasm -fmacho64 .tmp.s -o $$@
+	nasm -fmacho64 .tmp.s -o $$@
 	@rm .tmp.s
 
 endef
