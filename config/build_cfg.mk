@@ -38,32 +38,11 @@ define BUILD_RULE_cl
 # en plus de compiler, on genere un fichier objet ELF qui contient le binaires et des symboles
 # qui le definisse (debut et taille)
 
-$$(info DSGDSFGSDFGDFSGDSFGDFSGDFGDFSGF $1)
-
 build/$1/%.o: $1/%$$($1_EXT) build
 	$$(gen-pb $$<)
-	$$($1_CC) $$($1_CFLAGS) $(ACFLAGS_ACC) $$(S_CFLAGS_ACC) -c $$< -o $$@ $$(SFLAGS_ACC)
+	@$$($1_CC) $$($1_CFLAGS) $(ACFLAGS_ACC) $$(S_CFLAGS_ACC) -c $$< -o $$@ $$(SFLAGS_ACC)
 	@mv $$@ $$@.bin
-	@echo bits 64					>  .tmp.s
-	@echo section .rodata			>> .tmp.s
-	@echo -n global _start_			>> .tmp.s
-	@echo $$@ | tr /.- ___			>> .tmp.s
-	@echo -n global _end_			>> .tmp.s
-	@echo $$@ | tr /.- ___			>> .tmp.s
-	@echo -n global _size_			>> .tmp.s
-	@echo $$@ | tr /.- ___			>> .tmp.s
-	@echo -n _start_				>> .tmp.s
-	@echo -n $$@ | tr /.- ___		>> .tmp.s
-	@echo :   incbin \"$$@.bin\"	>> .tmp.s
-	@echo -n _end_					>> .tmp.s
-	@echo -n $$@ | tr /.- ___		>> .tmp.s
-	@echo :							>> .tmp.s
-	@echo -n _size_					>> .tmp.s
-	@echo -n $$@ | tr /.- ___		>> .tmp.s
-	@echo -n :    dd $$$$\-_start_	>> .tmp.s
-	@echo -n $$@ | tr /.- ___		>> .tmp.s
-	nasm -fmacho64 .tmp.s -o $$@
-	@rm .tmp.s
+	@nasm -fmacho64 .res_template.s -dNAME=`echo $$@ | tr /.- ___` -dPATH=$$@.bin -o $$@
 
 endef
 

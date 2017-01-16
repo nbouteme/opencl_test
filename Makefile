@@ -1,3 +1,5 @@
+# Toi qui t'aventure sur ces terres
+# Passe ton chemin. Ou abondonne tout espoir.
 CURDIR := $(shell pwd)
 ifeq ($(RUNDIR),)
 	RUNDIR := $(CURDIR)
@@ -28,10 +30,10 @@ endef
 define greenout
 $(shell printf "\033[0;32m%s\033[0m" "$(strip $1)")
 endef
-
+# C'est mon dernier avertissement, continue a tes risques et perils.
 src_from_modules = $(shell find $1 -maxdepth 1 -type f -or -type l | grep -v '^/\.' | grep '$($1_EXT)$$')
 nsrc_from_modules = $(shell find $1 -maxdepth 1 -type f -or -type l | grep -v '^/\.' | grep '.c$$' | wc -l)
-eq = $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
+eq = $(and $(findstring $1,$2),$(findstring $2,$1))
 get_val_in_file =	$(if $(call file_exist,$1),\
 						$(shell cat $1  | sed -n "s/$2.=.//p"))
 
@@ -39,12 +41,15 @@ BUILD_CFG := $(shell ls ./config/build_cfg.mk 2> /dev/null)
 LINK_CFG := $(shell ls ./config/link_cfg.mk 2> /dev/null)
 SUBFOLDERS := $(shell find `pwd` -maxdepth 1 -type d ! -path `pwd` ! -path `pwd`/config ! -path `pwd`/build  | grep -v '/\.')
 
+to_def = $(shell echo $1 | tr [:lower:]/.- [:upper:]___)
+to_esc = $(shell echo $1 | tr /.- ___)
+
 PKG_DIR = $(shell pwd)
 
 $(assert-error LINK_CFG,BUILD_CFG)
 include $(BUILD_CFG)
 $(assert-error NAME,OUTPUT,MODULES,TYPE)
-
+# Wanna have a bad time?
 CUR_NAME			:= $(NAME)
 CUR_INCLUDE_DIRS	:= $(INCLUDE_DIRS)
 CUR_OPTS			:= $(OPTS)
@@ -53,19 +58,29 @@ CUR_DEPS			:= $(DEPS)
 CUR_OUTPUT			:= $(OUTPUT)
 CUR_MODULES			:= $(shell find $(MODULES) -mindepth 0 -type d)
 
-$(foreach sub,$(CUR_MODULES),							\
-	$(eval PARENT := $(dir $(sub)))						\
-	$(eval PARENT := $(PARENT:/=))						\
-	$(if $(call eq $(PARENT),.),kek,					\
-		$(eval $(if $($(PARENT)_CC), $(sub)_CC ?= $($(PARENT)_CC)))			\
-		$(eval $(if $($(PARENT)_CFLAGS), $(sub)_CFLAGS ?= $($(PARENT)_CFLAGS)))	\
-		$(eval $(if $($(PARENT)_EXT), $(sub)_EXT ?= $($(PARENT)_EXT)))			\
-		$(eval BUILD_RULE_$(sub) = $(BUILD_RULE_$(PARENT)))\
-))
-
 KEK = cl/kek
 
-$(info ==== $(BUILD_RULE_$(KEK)) ====)
+define def_cpy
+define $1
+$2
+endef
+endef
+
+$(foreach sub,$(CUR_MODULES),													\
+	$(eval PARENT := $(dir $(sub)))												\
+	$(eval PARENT := $(PARENT:/=))												\
+	$(if $(call eq,$(PARENT),.),,												\
+		$(if $($(PARENT)_CC), $(eval $(sub)_CC ?= $($(PARENT)_CC)))				\
+		$(if $($(PARENT)_CFLAGS), $(eval $(sub)_CFLAGS ?= $($(PARENT)_CFLAGS)))	\
+		$(if $($(PARENT)_EXT), $(eval $(sub)_EXT ?= $($(PARENT)_EXT)))			\
+		$(if $($(PARENT)_EMBED), $(eval $(sub)_EMBED ?= $($(PARENT)_EMBED)))	\
+		$(if $(BUILD_RULE_$(PARENT)),											\
+			$(if $(BUILD_RULE_$(sub)),,											\
+				$(eval $(call def_cpy,BUILD_RULE_$(sub),$(BUILD_RULE_$(PARENT))))\
+			)																	\
+		)																		\
+	)																			\
+)
 
 LFLAGS_ACC			:= $(LFLAGS)
 INCLUDE_DIRS_ACC	:= $(INCLUDE_DIRS)
@@ -73,6 +88,10 @@ CFLAGS_ACC			:= $(addprefix -I,$(INCLUDE_DIRS)) $(CFLAGS)
 S_LFLAGS_ACC		:= $(LFLAGS_$(SYSTEM))
 S_CFLAGS_ACC		:= $(CFLAGS_$(SYSTEM))
 S_FLAGS_ACC			:= $(SFLAGS_$(SYSTEM))
+
+#####################
+#### Watch THIS! ####
+#####################
 
 all: $(CUR_OUTPUT)
 
@@ -116,10 +135,13 @@ build:
 	$(info $(call blueout,Building temporary build directory hierachy...))
 	@mkdir -p build
 
+# pssssht.... nothing personal......,, kid
+
 define BUILD_DIR_RULE
 
 $$(eval $1_CC ?= $(CC))
 $$(eval $1_EXT ?= .c)
+$$(eval MY_NAME = $1)
 
 $$(eval TMP = $$(call src_from_modules,$1))
 $$(eval SRCS += $$(TMP))
@@ -136,34 +158,12 @@ build/$1: build
 
 ifneq ($$($1_EMBED),)
 
-$$(eval OBJS += $1/$1_embedded.o)
+$(if $(call file_exist,./.table_template.s),,$(error Missing table template, required for embedding ressources))
+$$(eval $1_OUTPUT_EOBJ = $$(call to_esc,$1))
+$$(eval OBJS += $1/$$($1_OUTPUT_EOBJ)_embedded.o)
 
-build/$1/$1_embedded.o: $(addprefix build/,$(OBJS))
-	@echo bits 64 > .tmp2.s
-	@echo section .rodata >> .tmp2.s
-	@for i in $$($1_OBJSP); do \
-		echo extern _start_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo extern _size_$$$$i | tr /.- ___ >> .tmp2.s;\
-	done
-	@echo -n global >> .tmp2.s
-	@echo _$1_symtable: | tr /.- ___ >> .tmp2.s;
-	@for i in $$($1_OBJSP); do \
-		echo _str_$$$$i: | tr /.- ___ >> .tmp2.s;\
-		echo db \'str_$$$$i\', 0 | tr /.- ___ >> .tmp2.s;\
-	done
-	@echo _$1_symtable: >> .tmp2.s
-	@for i in $$($1_OBJSP); do \
-		echo dq _str_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq _start_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq _size_$$$$i | tr /.- ___ >> .tmp2.s;\
-		echo dq 0 >> .tmp2.s;\
-	done
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@echo dq 0 >> .tmp2.s
-	@nasm -fmacho64 .tmp2.s -o $$@
-	@rm .tmp2.s
+build/$1/$$($1_OUTPUT_EOBJ)_embedded.o: $(addprefix build/,$(OBJS))
+	nasm -fmacho64 .table_template.s -dEPATH=$$($1_OUTPUT_EOBJ) -dOBJECTS=`echo $$($1_OBJSP) | tr ' /.-' ',___'` -o $$@
 
 endif
 
@@ -172,10 +172,8 @@ endef
 define BUILD_RULE_DEFAULT
 build/$1/%.o: $1/%$$($1_EXT) build
 	$$(gen-pb $$<)
-	$$($1_CC) $$($1_CFLAGS) $(ACFLAGS_ACC) $$(S_CFLAGS_ACC) -c $$< -o $$@ $$(SFLAGS_ACC)
+	@$$($1_CC) $$($1_CFLAGS) $(ACFLAGS_ACC) $$(S_CFLAGS_ACC) -c $$< -o $$@ $$(SFLAGS_ACC)
 endef
-
-to_def = $(shell echo $1 | tr [:lower:]/.- [:upper:]___)
 
 $(foreach mod,$(CUR_MODULES),						\
 	$(eval SFLAGS_ACC += -D$(call to_def,$(mod)))	\
@@ -183,10 +181,18 @@ $(foreach mod,$(CUR_MODULES),						\
 	$(eval $(call BUILD_DIR_RULE,$(mod)))			\
 	$(eval $(if $(BUILD_RULE_$(mod)),				\
 		$(call BUILD_RULE_$(mod),$(mod)),			\
-		$(info $(mod) DOESNT HAVE SPECIFIC RULE)$(call BUILD_RULE_DEFAULT,$(mod))))			\
+		$(call BUILD_RULE_DEFAULT,$(mod))))			\
+	$(if $($(mod)_EMBED),$(eval EMBED_MODS += $(mod)))\
 )
 
-#$(info $(.VARIABLES))
+define EMBED_PATH_RULE
+$$(eval OBJS += embedded_mods.o)
+
+build/embedded_mods.o: $(addprefix build/,$(OBJS))
+	nasm -fmacho64 .embed_template.s -dOBJECTS=`echo $$(EMBED_MODS) | tr ' /.-' ',___'` -o $$@
+endef
+
+$(if $(EMBED_MODS), $(eval $(EMBED_PATH_RULE)))
 
 NSRCS = $(words $(SRCS))
 
@@ -199,9 +205,9 @@ tail:
 $(CUR_OUTPUT): $(BUILD_DEPS) $(DEP_ACC) $(addprefix build/,$(OBJS)) | tail
 	@printf "\e[34mLinking %s..." $(CUR_OUTPUT)
 ifeq ($(CUR_TYPE),prog)
-	$(CC) $(addprefix build/,$(OBJS)) -o $(CUR_OUTPUT) $(LFLAGS_ACC) $(S_LFLAGS_ACC) $(SFLAGS_ACC)
+	@$(CC) $(addprefix build/,$(OBJS)) -o $(CUR_OUTPUT) $(LFLAGS_ACC) $(S_LFLAGS_ACC) $(SFLAGS_ACC)
 else
-	@ld -x -r $(addprefix build/,$(OBJS)) -o $(OUTPUT)
+	@ld -r $(addprefix build/,$(OBJS)) -o $(OUTPUT)
 endif
 	@printf "\e[32m✓\e[0m\n"
 
