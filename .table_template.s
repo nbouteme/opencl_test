@@ -6,6 +6,7 @@ section .rodata
 %macro MAKE_TABLE 1-*
 	%rep %0
 	extern _start_%1
+	extern _end_%1
 	extern _size_%1
 	%rotate 1
 	%endrep
