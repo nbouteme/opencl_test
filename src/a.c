@@ -33,6 +33,46 @@ typedef struct {
 	cl_mem tex_ref;
 } t_clctx;
 
+typedef struct
+{
+	const unsigned char *start;
+	unsigned long *size;
+}	t_export_data;
+
+typedef struct
+{
+	const char *filename;
+	t_export_data data;
+	void *unused;
+}	t_symtable;
+
+typedef struct
+{
+	const char *module_name;
+	t_symtable *syms;
+}	t_module;
+
+t_export_data get_embedded_data(const char *name)
+{
+	extern t_module g_embedded_mod_table[];
+	t_module *modptr;
+	t_symtable *curmodsyms;
+
+	modptr = g_embedded_mod_table;
+	while (modptr->module_name)
+	{
+		curmodsyms = modptr->syms;
+		while (curmodsyms->filename)
+		{
+			if (strcmp(curmodsyms->filename, name) == 0)
+				return (curmodsyms->data);
+			++curmodsyms;
+		}
+		++modptr;
+	}
+	return ((t_export_data){0, 0});
+}
+
 void event_loop(void *up)
 {
 	t_clctx *ctx = up;
@@ -133,30 +173,27 @@ int init_opencl(t_clctx *ctx)
 	if (err != CL_SUCCESS)
 		printf("error %d\n", err);
 	assert(err == CL_SUCCESS);
-//#define SOURCE
-#ifndef SOURCE
-	const unsigned char *file = (void*)"kernel.co";
-	//const unsigned char *file = (void*)"dump.bin";
-	size_t len = strlen((void*)file);
-	ctx->program = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len, &file, 0, &err);
-	if (err != CL_SUCCESS)
-		printf("error %d\n", err);
-	assert(err == CL_SUCCESS);
-	err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
-	if (err != CL_SUCCESS)
-		printf("error %d\n", err);
-	assert(err == CL_SUCCESS);
-#else
-	const char *file = (void*)"cl/kernel.cl";
-	const char *source = load_from_file(file);
-	size_t len = strlen(source);
-	ctx->program = clCreateProgramWithSource(ctx->ctx, 1, &source, &len, &err);
-	if (err != CL_SUCCESS)
-		printf("error %d\n", err);
-	assert(err == CL_SUCCESS);
-	err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
 
-	//free(source);
+	cl_program p[2];
+	t_export_data file = get_embedded_data("build_cl_kernel_o");
+	size_t len = *file.size;
+	p[0] = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len, &file.start, 0, &err);
+	if (err != CL_SUCCESS)
+		printf("error %d\n", err);
+	assert(err == CL_SUCCESS);
+
+	t_export_data file2 = get_embedded_data("build_cl_pok_o");
+	size_t len2 = *file.size;
+	p[1] = clCreateProgramWithBinary(ctx->ctx, 1, &devices[deviceUsed], &len2, &file2.start, 0, &err);
+	if (err != CL_SUCCESS)
+		printf("error %d\n", err);
+	assert(err == CL_SUCCESS);
+
+	ctx->program = clLinkProgram(ctx->ctx, 1, &devices[deviceUsed], 0, 2, p, 0, 0, &err);
+
+	//err = clBuildProgram(ctx->program, 1, &devices[deviceUsed], 0, 0, 0);
+	if (err != CL_SUCCESS)
+		printf("error %d\n", err);
 	if (err != CL_SUCCESS)
 	{
 		printf("error %d\n", err);
@@ -165,9 +202,12 @@ int init_opencl(t_clctx *ctx)
 		b = calloc(1, len);
 		clGetProgramBuildInfo(ctx->program, devices[deviceUsed], CL_PROGRAM_BUILD_LOG, len, b, 0);
 		puts(b);
+		free(b);
 	}
-#endif
+	assert(err == CL_SUCCESS);
 
+
+	
 	ctx->kernel = clCreateKernel(ctx->program, "clear_screen", &err);
 	if (err != CL_SUCCESS)
 		printf("error %d\n", err);
@@ -187,16 +227,6 @@ void destroy_opencl(t_clctx *ctx)
 	err = clReleaseContext(ctx->ctx);
 	assert(err == CL_SUCCESS);
 }
-
-typedef struct
-{
-	const char *filename;
-	void *start;
-	unsigned long size;
-	void *unused;
-}t_kek;
-
-extern t_kek symtable[];
 
 #include <stdio.h>
 #include <unistd.h>
